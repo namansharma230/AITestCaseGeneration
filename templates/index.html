@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Automatically generate QA test cases from Jira tickets and web requirement pages using AI.">
+    <title>Test Case Automator — Dashboard</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+    <!-- Confetti Celebration Overlay -->
+    <div id="celebration" class="celebration"></div>
+
+    <div class="container">
+
+        <!-- ── Navigation ────────────────────────────────────────────── -->
+        <nav class="nav">
+            <a href="/" class="nav__link nav__link--active">🤖 Test Cases</a>
+            <a href="/summary" class="nav__link">📋 Summary</a>
+        </nav>
+
+        <!-- ── Header ──────────────────────────────────────────────────── -->
+        <header class="header">
+            <div class="header__icon">🤖</div>
+            <h1 class="header__title">Test Case Automator</h1>
+            <p class="header__subtitle">Generate QA test cases from Jira tickets &amp; Confluence pages in seconds using AI</p>
+        </header>
+
+        <!-- ── Stats Cards ─────────────────────────────────────────────── -->
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-card__value" id="stat-url">—</div>
+                <div class="stat-card__label">Current URL</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card__value" id="stat-test-cases">—</div>
+                <div class="stat-card__label">Test Cases Generated</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card__value" id="stat-status">Idle</div>
+                <div class="stat-card__label">Status</div>
+            </div>
+        </div>
+
+        <!-- ── Jira Input Form Card ─────────────────────────────────────── -->
+        <div class="card">
+            <h2 class="card__title">
+                <span class="card__title-icon">🔗</span>
+                Generate from Jira Ticket
+                <span class="card__title-badge card__title-badge--jira">Jira</span>
+            </h2>
+
+            <form id="generate-form">
+                <div class="form__group">
+                    <label class="form__label" for="url-input">Jira Ticket URL</label>
+                    <input type="url" id="url-input" class="form__input"
+                        placeholder="https://astrogo.atlassian.net/browse/ALTV-551" required>
+                    <div class="form__hint">Enter the full Jira ticket URL or any web page with requirements</div>
+                </div>
+
+                <div class="form__group">
+                    <label class="form__label" for="selector-input">CSS Selector</label>
+                    <input type="text" id="selector-input" class="form__input"
+                        placeholder="[data-testid='issue.views.field.rich-text.description']" required>
+                    <div class="form__hint">CSS selector for the requirement section — use <strong>Discover
+                            mode</strong> if unsure</div>
+                </div>
+
+                <button type="submit" id="submit-btn" class="btn">
+                    <span class="btn__spinner"></span>
+                    <span class="btn__text">🚀 Generate from Jira</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- ── OR Divider ───────────────────────────────────────────────── -->
+        <div class="card-divider">
+            <span class="card-divider__line"></span>
+            <span class="card-divider__text">OR</span>
+            <span class="card-divider__line"></span>
+        </div>
+
+        <!-- ── Confluence Input Form Card ───────────────────────────────── -->
+        <div class="card card--confluence">
+            <h2 class="card__title">
+                <span class="card__title-icon">📄</span>
+                Generate from Confluence Page
+                <span class="card__title-badge card__title-badge--confluence">Confluence</span>
+            </h2>
+
+            <form id="confluence-form">
+                <div class="form__group">
+                    <label class="form__label" for="confluence-url-input">Confluence Page URL</label>
+                    <input type="url" id="confluence-url-input" class="form__input form__input--confluence"
+                        placeholder="https://astrogo.atlassian.net/wiki/spaces/ALC/pages/..." required>
+                    <div class="form__hint">Enter the full Confluence wiki page URL — no CSS selector needed, content is
+                        auto-detected</div>
+                </div>
+
+                <button type="submit" id="confluence-submit-btn" class="btn btn--confluence">
+                    <span class="btn__spinner"></span>
+                    <span class="btn__text">📄 Generate from Confluence</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- ── Status Banner ───────────────────────────────────────────── -->
+        <div id="status-banner" class="status-banner">
+            <span class="status-banner__icon" id="status-icon"></span>
+            <span class="status-banner__text" id="status-text"></span>
+        </div>
+
+        <!-- ── Progress Steps ──────────────────────────────────────────── -->
+        <div id="progress-steps" class="progress-steps">
+            <div class="progress-step">
+                <span class="progress-step__icon">🌐</span>
+                Scraping Page
+            </div>
+            <div class="progress-step">
+                <span class="progress-step__icon">🤖</span>
+                AI Generating
+            </div>
+            <div class="progress-step">
+                <span class="progress-step__icon">📋</span>
+                Parsing Results
+            </div>
+            <div class="progress-step">
+                <span class="progress-step__icon">📊</span>
+                Writing Excel
+            </div>
+        </div>
+
+        <!-- ── Live Logs Card ──────────────────────────────────────────── -->
+        <div class="card">
+            <h2 class="card__title">
+                <span class="card__title-icon">📡</span>
+                Live Output
+                <span class="card__title-badge" id="log-badge">Terminal</span>
+            </h2>
+
+            <div class="log-panel">
+                <div class="log-panel__header">
+                    <div class="log-panel__dots">
+                        <span class="log-panel__dot log-panel__dot--red"></span>
+                        <span class="log-panel__dot log-panel__dot--yellow"></span>
+                        <span class="log-panel__dot log-panel__dot--green"></span>
+                    </div>
+                    <span class="log-panel__title">test_case_automator — output</span>
+                </div>
+                <div class="log-panel__body" id="log-body">
+                    <div class="log-panel__placeholder" id="log-placeholder">
+                        <span class="log-panel__placeholder-icon">📡</span>
+                        Logs will appear here once you start generating test cases.<br>
+                        Enter a URL and selector above, then click <strong>Generate</strong>.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Footer ──────────────────────────────────────────────────── -->
+        <footer class="footer">
+            Test Case Automator &mdash; Powered by Groq & Selenium &bull; IRDETO
+        </footer>
+
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>

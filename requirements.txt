@@ -1,0 +1,10 @@
+# Test Case Automator – Python Dependencies
+# Install with: pip install -r requirements.txt
+
+selenium>=4.18.0                # Built-in Selenium Manager handles Edge driver automatically
+openpyxl>=3.1.2
+openai>=1.30.0
+python-dotenv>=1.0.1
+beautifulsoup4>=4.12.3
+lxml>=5.2.0                     # Fast HTML parser backend for BeautifulSoup
+flask>=3.0.0                    # Web dashboard server

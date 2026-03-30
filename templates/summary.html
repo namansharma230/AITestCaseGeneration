@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Analyse Jira tickets and Confluence pages — get a structured summary and testing dependencies.">
+    <title>Requirement Summary — Test Case Automator</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <!-- ── Navigation ────────────────────────────────────────────── -->
+        <nav class="nav">
+            <a href="/" class="nav__link">🤖 Test Cases</a>
+            <a href="/summary" class="nav__link nav__link--active">📋 Summary</a>
+        </nav>
+
+        <!-- ── Header ──────────────────────────────────────────────────── -->
+        <header class="header">
+            <div class="header__icon">📋</div>
+            <h1 class="header__title">Requirement Analyser</h1>
+            <p class="header__subtitle">Get a structured summary &amp; identify testing dependencies from any
+                requirement page</p>
+        </header>
+
+        <!-- ── Jira Input Form Card ─────────────────────────────────────── -->
+        <div class="card">
+            <h2 class="card__title">
+                <span class="card__title-icon">🔍</span>
+                Analyse Jira Requirement
+                <span class="card__title-badge card__title-badge--jira">Jira</span>
+            </h2>
+
+            <form id="summary-form">
+                <div class="form__group">
+                    <label class="form__label" for="summary-url-input">Jira Ticket URL</label>
+                    <input type="url" id="summary-url-input" class="form__input"
+                        placeholder="https://astrogo.atlassian.net/browse/ALTV-551" required>
+                    <div class="form__hint">Enter the full Jira ticket URL or any web page with requirements</div>
+                </div>
+
+                <div class="form__group" id="selector-group">
+                    <label class="form__label" for="summary-selector-input">CSS Selector</label>
+                    <input type="text" id="summary-selector-input" class="form__input"
+                        placeholder="[data-testid='issue.views.field.rich-text.description']" required>
+                    <div class="form__hint">CSS selector for the requirement section</div>
+                </div>
+
+                <button type="submit" id="summary-submit-btn" class="btn btn--summary">
+                    <span class="btn__spinner"></span>
+                    <span class="btn__text">📋 Analyse Jira Requirement</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- ── OR Divider ───────────────────────────────────────────────── -->
+        <div class="card-divider">
+            <span class="card-divider__line"></span>
+            <span class="card-divider__text">OR</span>
+            <span class="card-divider__line"></span>
+        </div>
+
+        <!-- ── Confluence Input Form Card ───────────────────────────────── -->
+        <div class="card card--confluence">
+            <h2 class="card__title">
+                <span class="card__title-icon">📄</span>
+                Analyse Confluence Page
+                <span class="card__title-badge card__title-badge--confluence">Confluence</span>
+            </h2>
+
+            <form id="summary-confluence-form">
+                <div class="form__group">
+                    <label class="form__label" for="summary-confluence-url-input">Confluence Page URL</label>
+                    <input type="url" id="summary-confluence-url-input" class="form__input form__input--confluence"
+                        placeholder="https://astrogo.atlassian.net/wiki/spaces/ALC/pages/4599251037/Pay+TV+-+TA+Genre+Search"
+                        required>
+                    <div class="form__hint">Enter the Confluence Wiki URL — content is auto-detected, no selector needed</div>
+                </div>
+
+                <button type="submit" id="summary-confluence-submit-btn" class="btn btn--confluence btn--summary">
+                    <span class="btn__spinner"></span>
+                    <span class="btn__text">📋 Analyse Confluence Page</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- ── Status Banner ───────────────────────────────────────────── -->
+        <div id="status-banner" class="status-banner">
+            <span id="status-icon" class="status-banner__icon"></span>
+            <span id="status-text" class="status-banner__text"></span>
+        </div>
+
+        <!-- ── Progress Steps ──────────────────────────────────────────── -->
+        <div id="progress-steps" class="progress-steps">
+            <div class="progress-step">
+                <span class="progress-step__icon">1</span>
+                <span class="progress-step__label">Scraping</span>
+            </div>
+            <div class="progress-step__connector"></div>
+            <div class="progress-step">
+                <span class="progress-step__icon">2</span>
+                <span class="progress-step__label">Summary</span>
+            </div>
+            <div class="progress-step__connector"></div>
+            <div class="progress-step">
+                <span class="progress-step__icon">3</span>
+                <span class="progress-step__label">Dependencies</span>
+            </div>
+        </div>
+
+        <!-- ── Results Section (hidden by default) ─────────────────────── -->
+        <div id="results-section" class="results-section" style="display: none;">
+
+            <!-- Summary Card -->
+            <div class="card card--result">
+                <h2 class="card__title">
+                    <span class="card__title-icon">📝</span>
+                    Requirement Summary
+                    <span id="complexity-badge" class="card__title-badge"></span>
+                </h2>
+
+                <div class="summary-content">
+                    <div class="summary-content__overview" id="summary-overview"></div>
+
+                    <div class="summary-content__section">
+                        <h3 class="summary-content__heading">Key Features</h3>
+                        <ul id="summary-features" class="summary-content__list"></ul>
+                    </div>
+
+                    <div class="summary-content__section">
+                        <h3 class="summary-content__heading">Scope</h3>
+                        <p id="summary-scope" class="summary-content__text"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dependencies Card -->
+            <div class="card card--result">
+                <h2 class="card__title">
+                    <span class="card__title-icon">📦</span>
+                    Testing Dependencies
+                    <span id="deps-count-badge" class="card__title-badge card__title-badge--confluence"></span>
+                </h2>
+
+                <div class="deps-table-wrapper">
+                    <table class="deps-table" id="deps-table">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Item</th>
+                                <th>Description</th>
+                                <th>Owner</th>
+                                <th>Priority</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deps-tbody"></tbody>
+                    </table>
+                    <div id="deps-empty" class="deps-empty" style="display: none;">
+                        No dependencies identified.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Log Panel ───────────────────────────────────────────────── -->
+        <div class="card">
+            <h2 class="card__title">
+                <span class="card__title-icon">📡</span>
+                Live Output
+                <span class="card__title-badge">TERMINAL</span>
+            </h2>
+
+            <div class="log-panel">
+                <div class="log-panel__header">
+                    <span class="log-dot log-dot--red"></span>
+                    <span class="log-dot log-dot--yellow"></span>
+                    <span class="log-dot log-dot--green"></span>
+                    <span class="log-panel__title">requirement_analyser — output</span>
+                </div>
+                <div id="log-body" class="log-panel__body">
+                    <div id="log-placeholder" class="log-panel__placeholder">
+                        <div class="log-panel__placeholder-icon">📋</div>
+                        <p>Enter a URL above and click <strong>Analyse</strong> to get started.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Footer ──────────────────────────────────────────────────── -->
+        <footer class="footer">
+            Test Case Automator &mdash; Powered by Groq & Selenium &bull; IRDETO
+        </footer>
+
+    </div>
+
+    <script src="{{ url_for('static', filename='summary.js') }}"></script>
+</body>
+
+</html>
