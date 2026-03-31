@@ -8,3 +8,4 @@ python-dotenv>=1.0.1
 beautifulsoup4>=4.12.3
 lxml>=5.2.0                     # Fast HTML parser backend for BeautifulSoup
 flask>=3.0.0                    # Web dashboard server
+pyinstaller>=6.0.0              # Package as standalone Windows .exe

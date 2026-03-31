@@ -43,14 +43,7 @@
                     <label class="form__label" for="summary-url-input">Jira Ticket URL</label>
                     <input type="url" id="summary-url-input" class="form__input"
                         placeholder="https://astrogo.atlassian.net/browse/ALTV-551" required>
-                    <div class="form__hint">Enter the full Jira ticket URL or any web page with requirements</div>
-                </div>
-
-                <div class="form__group" id="selector-group">
-                    <label class="form__label" for="summary-selector-input">CSS Selector</label>
-                    <input type="text" id="summary-selector-input" class="form__input"
-                        placeholder="[data-testid='issue.views.field.rich-text.description']" required>
-                    <div class="form__hint">CSS selector for the requirement section</div>
+                    <div class="form__hint">Enter the full Jira ticket URL — the description selector is applied automatically</div>
                 </div>
 
                 <button type="submit" id="summary-submit-btn" class="btn btn--summary">
@@ -115,7 +108,33 @@
             </div>
         </div>
 
-        <!-- ── Results Section (hidden by default) ─────────────────────── -->
+        <!-- ── Results Ready Panel ────────────────────────────────────── -->
+        <div id="results-panel" class="results-panel" style="display: none;">
+            <div class="results-panel__icon">📋</div>
+            <div class="results-panel__content">
+                <div class="results-panel__title">Analysis Complete!</div>
+                <div class="results-panel__subtitle" id="results-subtitle">
+                    Summary and dependencies saved to Excel.
+                </div>
+            </div>
+            <button id="download-summary-btn" class="btn btn--download">
+                <span class="btn__icon">⬇</span>
+                <span class="btn__text">&nbsp;Download Excel</span>
+            </button>
+        </div>
+
+        <!-- ── Error Hint ─────────────────────────────────────────────── -->
+        <div id="error-hint" class="error-hint" style="display: none;">
+            <div class="error-hint__title">💡 Troubleshooting Tips</div>
+            <ul class="error-hint__list">
+                <li>Make sure Edge is running with remote debugging — double-click <code>start_edge.bat</code></li>
+                <li>Ensure you are logged into Jira / Confluence in that Edge window before submitting</li>
+                <li>Verify your Groq API key is correct in the <code>.env</code> file</li>
+                <li>Check that the URL is accessible (not behind a VPN or firewall)</li>
+                <li>For Confluence pages, ensure the page is fully loaded in Edge before analysing</li>
+            </ul>
+        </div>
+
         <div id="results-section" class="results-section" style="display: none;">
 
             <!-- Summary Card -->

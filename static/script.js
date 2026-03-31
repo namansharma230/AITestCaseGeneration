@@ -9,7 +9,6 @@
     // ── DOM References ───────────────────────────────────────────────────────
     const form        = document.getElementById('generate-form');
     const urlInput    = document.getElementById('url-input');
-    const selectorInput = document.getElementById('selector-input');
     const submitBtn   = document.getElementById('submit-btn');
 
     const confluenceForm   = document.getElementById('confluence-form');
@@ -29,17 +28,28 @@
     const statTestCases   = document.getElementById('stat-test-cases');
     const statStatus      = document.getElementById('stat-status');
 
+    const resultsPanel    = document.getElementById('results-panel');
+    const resultsSubtitle = document.getElementById('results-subtitle');
+    const downloadBtn     = document.getElementById('download-btn');
+    const errorHint       = document.getElementById('error-hint');
+
     let currentEventSource = null;
     let currentStepIndex   = -1;
+
+    // ── Download Button ──────────────────────────────────────────────────────
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', () => {
+            window.location.href = '/api/download';
+        });
+    }
 
     // ── Jira Form Submission ─────────────────────────────────────────────────
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        const url      = urlInput.value.trim();
-        const selector = selectorInput.value.trim();
+        const url = urlInput.value.trim();
 
-        if (!url || !selector) return;
+        if (!url) return;
 
         // Reset UI
         resetUI();
@@ -56,7 +66,7 @@
             const res = await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, selector }),
+                body: JSON.stringify({ url }),
             });
 
             const data = await res.json();
@@ -238,10 +248,19 @@
             showBanner('success', '🎉', summary.message);
             statTestCases.textContent = summary.test_count;
             statStatus.textContent = 'Complete';
+            // Show results panel with download button
+            if (resultsSubtitle) {
+                resultsSubtitle.textContent = `${summary.test_count} test case(s) generated and saved to Documents\\TestCaseAutomator\\test_cases.xlsx`;
+            }
+            if (resultsPanel) resultsPanel.style.display = 'flex';
+            if (errorHint) errorHint.style.display = 'none';
             triggerCelebration();
         } else {
             showBanner('error', '❌', summary.message || 'An error occurred.');
             statStatus.textContent = 'Failed';
+            // Show troubleshooting hints
+            if (errorHint) errorHint.style.display = 'block';
+            if (resultsPanel) resultsPanel.style.display = 'none';
         }
     }
 
@@ -260,7 +279,6 @@
     function setAllFormsLoading(loading) {
         // Jira form
         urlInput.disabled      = loading;
-        selectorInput.disabled = loading;
         submitBtn.disabled     = loading;
 
         // Confluence form
@@ -295,6 +313,10 @@
         // Hide celebration
         celebration.classList.remove('celebration--active');
         celebration.innerHTML = '';
+
+        // Hide results panel & error hint
+        if (resultsPanel) resultsPanel.style.display = 'none';
+        if (errorHint) errorHint.style.display = 'none';
 
         // Close existing SSE
         if (currentEventSource) {

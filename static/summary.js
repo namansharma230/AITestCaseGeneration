@@ -11,7 +11,6 @@
     // ── DOM References ───────────────────────────────────────────────────────
     const form            = document.getElementById('summary-form');
     const urlInput        = document.getElementById('summary-url-input');
-    const selectorInput   = document.getElementById('summary-selector-input');
     const submitBtn       = document.getElementById('summary-submit-btn');
 
     const confluenceForm        = document.getElementById('summary-confluence-form');
@@ -36,9 +35,21 @@
     const depsCountBadge  = document.getElementById('deps-count-badge');
     const depsEmpty       = document.getElementById('deps-empty');
 
+    const resultsPanel        = document.getElementById('results-panel');
+    const resultsSubtitle     = document.getElementById('results-subtitle');
+    const downloadSummaryBtn  = document.getElementById('download-summary-btn');
+    const errorHint           = document.getElementById('error-hint');
+
     let currentEventSource = null;
     let currentStepIndex   = -1;
     let currentJobId       = null;
+
+    // ── Download Button ──────────────────────────────────────────────────────
+    if (downloadSummaryBtn) {
+        downloadSummaryBtn.addEventListener('click', () => {
+            window.location.href = '/api/download-summary';
+        });
+    }
 
     // ── Form Submissions ─────────────────────────────────────────────────────
     if (form) {
@@ -46,7 +57,6 @@
             e.preventDefault();
             handleSubmission({
                 url: urlInput.value.trim(),
-                selector: selectorInput.value.trim(),
                 isConfluence: false
             });
         });
@@ -63,9 +73,8 @@
         });
     }
 
-    async function handleSubmission({ url, selector, isConfluence }) {
+    async function handleSubmission({ url, isConfluence }) {
         if (!url) return;
-        if (!isConfluence && !selector) return;
 
         resetUI();
         setFormLoading(true, isConfluence);
@@ -74,7 +83,7 @@
 
         try {
             const body = { url };
-            if (!isConfluence && selector) body.selector = selector;
+            // No selector sent — the backend defaults to JIRA_CSS_SELECTOR from config.py
 
             const res = await fetch('/api/summarize', {
                 method: 'POST',
@@ -199,10 +208,19 @@
 
         if (summaryMsg.status === 'success') {
             showBanner('success', '🎉', summaryMsg.message || 'Analysis complete!');
+            // Show results panel with download button
+            if (resultsSubtitle) {
+                resultsSubtitle.textContent = 'Summary and dependencies saved to Documents\\TestCaseAutomator\\summary_requirements.xlsx';
+            }
+            if (resultsPanel) resultsPanel.style.display = 'flex';
+            if (errorHint) errorHint.style.display = 'none';
             // Fetch the actual result data
             await fetchAndRenderResults(currentJobId);
         } else {
             showBanner('error', '❌', summaryMsg.message || 'An error occurred.');
+            // Show troubleshooting hints
+            if (errorHint) errorHint.style.display = 'block';
+            if (resultsPanel) resultsPanel.style.display = 'none';
         }
     }
 
@@ -335,7 +353,6 @@
             }
         } else {
             urlInput.disabled       = loading;
-            selectorInput.disabled  = loading;
             submitBtn.disabled      = loading;
             if (loading) {
                 submitBtn.classList.add('btn--loading');
@@ -357,6 +374,10 @@
         progressSteps.classList.remove('progress-steps--visible');
         currentStepIndex = -1;
         resultsSection.style.display = 'none';
+
+        // Hide results panel & error hint
+        if (resultsPanel) resultsPanel.style.display = 'none';
+        if (errorHint) errorHint.style.display = 'none';
 
         if (currentEventSource) {
             currentEventSource.close();

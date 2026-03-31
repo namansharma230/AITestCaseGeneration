@@ -14,10 +14,15 @@ import time
 import uuid
 from pathlib import Path
 
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, send_file
+
+# ── PyInstaller compatibility ────────────────────────────────────────────────────
+# When frozen as an .exe, static assets and templates are extracted to _MEIPASS.
+# In development, they live next to this file.
+_BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(__file__).parent))
 
 # ── Setup project imports ─────────────────────────────────────────────────────
-from config import LOG_DIR, LOG_FILE, EXCEL_FILE_PATH
+from config import LOG_DIR, LOG_FILE, EXCEL_FILE_PATH, JIRA_CSS_SELECTOR
 from scraper import scrape_section
 from confluence_scraper import scrape_confluence_page
 from prompt_template import generate_test_cases, generate_confluence_test_cases
@@ -25,7 +30,11 @@ from summary_prompt import generate_summary, generate_dependencies
 from parser import parse_to_rows
 from excel_handler import append_test_cases, append_summary_to_excel
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    template_folder=str(_BASE_DIR / "templates"),
+    static_folder=str(_BASE_DIR / "static"),
+)
 
 # ── Job Management ────────────────────────────────────────────────────────────
 # Each job has: { "id": str, "status": "running"|"success"|"error",
@@ -300,6 +309,11 @@ def _run_summary_pipeline(job_id: str, url: str, selector: str):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+@app.route("/api/status")
+def api_status():
+    """Health check — used by launcher.py to know Flask is ready."""
+    return jsonify({"status": "ok", "version": "1.0.0"}), 200
+
 @app.route("/")
 def index():
     """Serve the dashboard page."""
@@ -317,14 +331,14 @@ def api_generate():
     """Start a Jira test-case generation job. Returns a job_id for SSE subscription."""
     data = request.get_json(force=True)
     url = (data.get("url") or "").strip()
-    selector = (data.get("selector") or "").strip()
+    # Use the hardcoded ALTV selector if none is supplied by the client.
+    # To change the selector for all pages, update JIRA_CSS_SELECTOR in config.py.
+    selector = (data.get("selector") or JIRA_CSS_SELECTOR).strip()
 
     if not url:
         return jsonify({"error": "URL is required."}), 400
     if not url.startswith(("http://", "https://")):
         return jsonify({"error": "URL must start with http:// or https://"}), 400
-    if not selector:
-        return jsonify({"error": "CSS Selector is required."}), 400
 
     job_id = uuid.uuid4().hex[:12]
     with _jobs_lock:
@@ -374,7 +388,9 @@ def api_summarize():
     """Start a summary + dependencies job. Returns a job_id for SSE subscription."""
     data = request.get_json(force=True)
     url = (data.get("url") or "").strip()
-    selector = (data.get("selector") or "").strip()
+    # Use the hardcoded ALTV selector if none is supplied by the client.
+    # To change the selector for all pages, update JIRA_CSS_SELECTOR in config.py.
+    selector = (data.get("selector") or JIRA_CSS_SELECTOR).strip()
 
     if not url:
         return jsonify({"error": "URL is required."}), 400
@@ -383,8 +399,6 @@ def api_summarize():
 
     # Confluence doesn't need a selector
     is_confluence = "/wiki/" in url
-    if not is_confluence and not selector:
-        return jsonify({"error": "CSS Selector is required for Jira URLs."}), 400
 
     job_id = uuid.uuid4().hex[:12]
     with _jobs_lock:
@@ -458,6 +472,38 @@ def api_logs(job_id: str):
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
+    )
+
+
+@app.route("/api/download")
+def api_download():
+    """Serve the generated test cases Excel file as a download attachment."""
+    path = Path(EXCEL_FILE_PATH)
+    if not path.exists():
+        return jsonify({
+            "error": "No test cases file found. Generate test cases first."
+        }), 404
+    return send_file(
+        str(path.resolve()),
+        as_attachment=True,
+        download_name="test_cases.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.route("/api/download-summary")
+def api_download_summary():
+    """Serve the generated summary Excel file as a download attachment."""
+    summary_path = Path(EXCEL_FILE_PATH).parent / "summary_requirements.xlsx"
+    if not summary_path.exists():
+        return jsonify({
+            "error": "No summary file found. Generate a summary first."
+        }), 404
+    return send_file(
+        str(summary_path.resolve()),
+        as_attachment=True,
+        download_name="summary_requirements.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 

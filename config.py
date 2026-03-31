@@ -1,8 +1,19 @@
 import os
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Load .env file
 load_dotenv()
+
+# ── Output Directory ──────────────────────────────────────────────────────────
+# When running as a PyInstaller .exe, TESTCASE_OUTPUT_DIR is set by launcher.py
+# Default: ~/Documents/TestCaseAutomator/  (clean, user-friendly location)
+_output_dir_default = os.getenv(
+    "TESTCASE_OUTPUT_DIR",
+    str(Path.home() / "Documents" / "TestCaseAutomator")
+)
+Path(_output_dir_default).mkdir(parents=True, exist_ok=True)
 
 # ── LLM Provider ──────────────────────────────────────────────────────────────
 # Set to "groq" for free testing, switch to "openai" when you add billing.
@@ -34,7 +45,10 @@ LLM_RETRIES: int = 3
 LLM_RETRY_DELAY: float = 2.0
 
 # ── Excel Settings ────────────────────────────────────────────────────────────
-EXCEL_FILE_PATH: str = os.getenv("EXCEL_FILE_PATH", "./test_cases.xlsx")
+EXCEL_FILE_PATH: str = os.getenv(
+    "EXCEL_FILE_PATH",
+    str(Path(_output_dir_default) / "test_cases.xlsx")
+)
 SHEET_NAME: str = "Test Cases"
 
 EXCEL_COLUMNS: dict[str, int] = {
@@ -60,6 +74,10 @@ EXCEL_HEADERS: list[str] = [
 # ── Scraper Settings ──────────────────────────────────────────────────────────
 MAX_TEXT_LENGTH: int = 5000
 SELENIUM_WAIT_SECONDS: int = 10
+
+# Default CSS selector used for all ALTV Jira pages.
+# Change this single value if the Jira DOM structure ever changes.
+JIRA_CSS_SELECTOR: str = "[data-testid='issue.views.field.rich-text.description']"
 
 # ── Confluence Scraper Settings ───────────────────────────────────────────
 CONFLUENCE_MAX_TEXT_LENGTH: int = 8000   # Wiki pages tend to be longer

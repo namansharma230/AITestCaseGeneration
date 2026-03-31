@@ -1,302 +1,366 @@
 # Test Case Automator 🤖
 
-Automatically scrape Jira (or any web page) requirement sections and generate comprehensive QA test cases using AI — all exported to a formatted Excel workbook.
+AI-powered tool that reads Jira tickets and Confluence pages and automatically generates comprehensive QA test cases — exported to a formatted Excel workbook. Includes a browser-based dashboard with live logs.
 
 ---
 
 ## How It Works
 
 ```
-Your Jira Ticket URL
-        │
-        ▼
- Edge Browser (Selenium)
- → Reads the requirement text
-        │
-        ▼
- AI Model (Groq or OpenAI)
- → Generates 5–10 test cases
-        │
-        ▼
- Excel File (test_cases.xlsx)
- → Saves Test Case ID, Title, Steps, Expected Result, Priority...
+Your Jira Ticket URL  ──or──  Confluence Page URL
+              │
+              ▼
+   Edge Browser (Selenium)
+   → Opens the page using your existing login session
+   → Reads the requirement / description text
+              │
+              ▼
+   AI Model (Groq — free)
+   → Generates 5–10 structured test cases
+              │
+              ▼
+   Excel File (test_cases.xlsx)
+   → Saves to Documents\TestCaseAutomator\
+   → Columns: ID · Title · Steps · Expected Result · Priority…
 ```
 
 ---
 
 ## What You Need Before Starting
 
-| Requirement | Why |
+| Requirement | Details |
 |---|---|
-| Windows PC | Script is configured for Microsoft Edge on Windows |
-| Python 3.10 or higher | The language the tool is built in |
-| Microsoft Edge browser | Already installed on most Windows machines |
-| Groq API key (free) | The AI that generates test cases — no credit card needed |
-| Access to your Jira | To scrape requirement text |
+| Windows PC | The tool is built and tested on Windows 10/11 |
+| Python 3.10 or higher | The programming language the tool runs on |
+| Microsoft Edge browser | Pre-installed on all modern Windows machines |
+| Groq API key (free) | Powers the AI — no credit card required |
+| Jira / Confluence access | Your normal browser login is reused |
 
 ---
 
 ## Step 1 — Install Python
 
-1. Open https://python.org/downloads
-2. Download the latest Python 3.x installer
-3. Run the installer — **tick "Add Python to PATH"** before clicking Install
-4. Verify it worked — open Command Prompt and type:
-   ```
-   python --version
-   ```
-   You should see something like `Python 3.11.x`
+1. Go to **https://www.python.org/downloads**
+2. Click **Download Python 3.x.x** (latest stable)
+3. Run the installer
+4. ✅ **Tick "Add Python to PATH"** at the bottom of the installer — this is essential
+5. Click **Install Now**
 
----
-
-## Step 2 — Download the Project Files
-
-Download all these files into **one folder** on your Desktop, for example:
-```
-C:\Users\YourName\Desktop\TestCaseAutomation\
-```
-
-Make sure you have all of these:
-```
-TestCaseAutomation/
-├── main.py
-├── scraper.py
-├── prompt_template.py
-├── parser.py
-├── excel_handler.py
-├── config.py
-├── requirements.txt
-└── .env              ← you will create this in Step 4
-```
-
----
-
-## Step 3 — Set Up a Virtual Environment
-
-A virtual environment keeps this project's dependencies separate from the rest of your system.
-
-Open **Command Prompt**, navigate to your project folder, and run:
+**Verify it worked** — open **Command Prompt** (`Win + R` → type `cmd` → Enter) and run:
 
 ```cmd
-cd C:\Users\YourName\Desktop\TestCaseAutomation
+python --version
+```
 
+You should see something like `Python 3.12.3`. If you see an error, restart your PC and try again.
+
+---
+
+## Step 2 — Get the Project Files
+
+Copy the entire `TestcaseautomationApp` folder to your machine. The recommended location is your Desktop:
+
+```
+C:\Users\YourName\Desktop\TestcaseautomationApp\
+```
+
+Make sure the folder contains all these files:
+
+```
+TestcaseautomationApp/
+├── app.py                  ← Flask web server (the dashboard)
+├── launcher.py             ← Opens the browser automatically
+├── main.py                 ← Command-line entry point
+├── scraper.py              ← Reads Jira page content via Edge
+├── confluence_scraper.py   ← Reads Confluence page content
+├── prompt_template.py      ← Sends text to AI, gets test cases
+├── summary_prompt.py       ← AI prompt for requirement summary
+├── parser.py               ← Converts AI JSON into Excel rows
+├── excel_handler.py        ← Writes rows to Excel
+├── config.py               ← Central settings (selector, model, etc.)
+├── requirements.txt        ← Python package list
+├── run_app.bat             ← Double-click to launch the dashboard
+├── start_edge.bat          ← Double-click to open Edge for Jira login
+├── templates/
+│   ├── index.html          ← Dashboard main page
+│   └── summary.html        ← Requirement summary page
+└── static/
+    ├── style.css
+    ├── script.js
+    └── summary.js
+```
+
+> ⚠️ You will create the `.env` file yourself in Step 5.
+
+---
+
+## Step 3 — Open a Command Prompt in the Project Folder
+
+1. Open **File Explorer** and navigate to the `TestcaseautomationApp` folder
+2. Click on the address bar at the top, type `cmd`, and press **Enter**
+
+A Command Prompt will open already pointing to the right folder. You should see something like:
+
+```
+C:\Users\YourName\Desktop\TestcaseautomationApp>
+```
+
+Keep this window open for the next steps.
+
+---
+
+## Step 4 — Create a Virtual Environment
+
+A virtual environment keeps this project's packages separate from the rest of your PC.
+
+In the Command Prompt from Step 3, run these **one at a time**:
+
+```cmd
 python -m venv .venv
+```
 
+```cmd
 .venv\Scripts\activate
 ```
 
-You will see `(.venv)` at the start of your command prompt — this means the virtual environment is active.
+You will see `(.venv)` appear at the start of your prompt — this means it is active:
 
-> ⚠️ **Every time you open a new Command Prompt window**, you must run `.venv\Scripts\activate` again before running the script.
+```
+(.venv) C:\Users\YourName\Desktop\TestcaseautomationApp>
+```
 
-Then install all dependencies:
+> ⚠️ **Every time you open a new Command Prompt window**, you must run `.venv\Scripts\activate` again before running any Python commands.
+
+Now install all required packages:
 
 ```cmd
 pip install -r requirements.txt
 ```
 
+This may take 1–2 minutes. You will see packages being downloaded and installed. Wait until your prompt returns before continuing.
+
 ---
 
-## Step 4 — Get a Free Groq API Key
+## Step 5 — Get a Free Groq API Key
 
-Groq is free and requires no credit card.
+Groq is the AI provider. It is **completely free** and requires no credit card.
 
 1. Go to **https://console.groq.com**
-2. Click **Sign Up** and create a free account
-3. After logging in, go to **API Keys** in the left menu
-4. Click **Create API Key**
-5. Copy the key — it starts with `gsk_...`
+2. Click **Sign Up** and create a free account (you can use Google or GitHub)
+3. Once logged in, click **API Keys** in the left sidebar
+4. Click **Create API Key**, give it any name (e.g. `test-automator`)
+5. **Copy the key** — it starts with `gsk_...`
+   
+> ⚠️ You only get to see the key once. Copy it now before closing the dialog.
 
 ---
 
-## Step 5 — Create Your `.env` File
+## Step 6 — Create Your `.env` File
 
-In your project folder, create a new file called exactly **`.env`** (no other extension).
+This file stores your secret API key. It must be created manually.
 
-> In Windows, open Notepad, paste the content below, then go to **File → Save As**, set "Save as type" to **All Files**, and name it `.env`
+**Method A — Using Notepad:**
 
-Paste this into the file:
+1. Open Notepad
+2. Paste the following:
 
 ```
-GROQ_API_KEY=gsk_paste_your_groq_key_here
+GROQ_API_KEY=gsk_paste_your_key_here
 LLM_PROVIDER=groq
 EXCEL_FILE_PATH=test_cases.xlsx
 ```
 
-Replace `gsk_paste_your_groq_key_here` with the key you copied in Step 4.
+3. Replace `gsk_paste_your_key_here` with the key you copied in Step 5
+4. Go to **File → Save As**
+5. Navigate to your `TestcaseautomationApp` folder
+6. Set **Save as type** to **All Files (\*.\*)**
+7. Set the filename to `.env` (with a dot at the start, no other extension)
+8. Click **Save**
 
-**No quotes around any of the values.** It should look exactly like:
+**Sample `.env` file (your key will be different):**
+
 ```
-GROQ_API_KEY=gsk_abc123xyz...
+GROQ_API_KEY=gsk_abc123xyz456def789...
 LLM_PROVIDER=groq
 EXCEL_FILE_PATH=test_cases.xlsx
 ```
 
----
+**Rules:**
+- ❌ No quotes around values — `GROQ_API_KEY=gsk_abc...` ✅ not `GROQ_API_KEY="gsk_abc..."` ❌
+- ❌ No spaces around `=`
+- ✅ The file must be named exactly `.env` and saved inside the `TestcaseautomationApp` folder
 
-## Step 6 — Set Up Edge for Jira (One-Time Login)
-
-Because Jira requires you to be logged in, we launch Edge in a special mode that lets the script reuse your login session. You only need to do this once.
-
-**Run this command in Command Prompt** (copy the whole thing):
+**Verify the key is loading correctly** (optional):
 
 ```cmd
-"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="C:\EdgeDebug"
+python -c "from dotenv import load_dotenv; load_dotenv(); import os; print(repr(os.getenv('GROQ_API_KEY')))"
 ```
 
-> If Edge is installed somewhere else, find it by typing `where msedge` in Command Prompt.
+It should print your key. If it prints `None`, the file is in the wrong location or named incorrectly.
 
-An Edge window will open. In that window:
+---
+
+## Step 7 — Set Up Edge for Jira Login (One-Time)
+
+The tool reuses your existing Jira login by connecting to a special Edge window. You only need to set this up once per session.
+
+**Double-click `start_edge.bat`** in the project folder.
+
+A new Edge window will open. In that window:
+
 1. Go to `https://astrogo.atlassian.net`
-2. Log in to Jira as normal
-3. **Leave this Edge window open** — do not close it
+2. Log in to Jira with your normal credentials
+3. ✅ **Leave this Edge window open** — do not close it while using the tool
 
-The script will automatically connect to this window every time you run it.
-
----
-
-## Step 7 — Run the Tool
-
-With your virtual environment active and the Edge window open, run:
-
-```cmd
-python main.py <JIRA_URL> "<SELECTOR>"
-```
-
-**Example:**
-```cmd
-python main.py https://astrogo.atlassian.net/browse/ALTV-551 "[data-testid='issue.views.field.rich-text.description']"
-```
-
-The selector `[data-testid='issue.views.field.rich-text.description']` works for most Jira Cloud tickets. If it doesn't work for a specific ticket, see the Troubleshooting section below.
+> The tool will automatically connect to this window every time you run it, reusing your login session without asking you to log in again.
 
 ---
 
-## What Happens When You Run It
+## Step 8 — Launch the Dashboard
 
-You will see logs like this — everything is working if you see all 4 steps:
+**Double-click `run_app.bat`** in the project folder.
+
+A terminal window will appear, and your browser will automatically open at:
 
 ```
-✓ Connected to existing Edge session.         ← Jira login reused
-✓ 1 element(s) found using: [data-testid=...] ← Requirement text found
-LLM call attempt 1/3 (provider: groq)         ← AI generating test cases
-Saved 8 row(s) to 'test_cases.xlsx'           ← Written to Excel ✅
+http://localhost:5000
 ```
 
-Open `test_cases.xlsx` in your project folder to see the results.
+> ⚠️ Keep the terminal window open while using the app. Closing it stops the server.
+
+You will see the dashboard with two sections:
+- **🔗 Generate from Jira Ticket** — paste a Jira URL and generate test cases
+- **📄 Generate from Confluence Page** — paste a Confluence URL and generate test cases
 
 ---
 
-## Excel Output
+## Using the Dashboard
 
-| Column | What It Contains |
+### Generate Test Cases from Jira
+
+1. In the **Generate from Jira Ticket** section, paste a Jira ticket URL:
+   ```
+   https://astrogo.atlassian.net/browse/ALTV-551
+   ```
+2. Click **🚀 Generate from Jira**
+3. Watch the live logs — you will see: Scraping → AI Generating → Parsing → Writing Excel
+4. When complete, click **⬇ Download Excel** to save the file
+
+### Generate Test Cases from Confluence
+
+1. In the **Generate from Confluence Page** section, paste a Confluence page URL:
+   ```
+   https://astrogo.atlassian.net/wiki/spaces/ALC/pages/...
+   ```
+2. Click **📄 Generate from Confluence**
+3. Process runs automatically — no selector needed for Confluence
+
+### Requirement Summary & Analysis (📋 Summary tab)
+
+Click the **📋 Summary** tab in the navigation to switch to the analyser. This page:
+- Generates a structured **overview, key features, and scope** from any Jira or Confluence page
+- Identifies **testing dependencies** (APIs, services, hardware, etc.)
+- Exports everything to a separate Excel file
+
+---
+
+## Output Files
+
+Both files are saved to:
+```
+C:\Users\YourName\Documents\TestCaseAutomator\
+```
+
+| File | Contents |
+|---|---|
+| `test_cases.xlsx` | All generated test cases, one sheet per Jira ticket |
+| `summary_requirements.xlsx` | Requirement summaries and dependency tables |
+
+### Test Cases Excel Columns
+
+| Column | Contents |
 |---|---|
 | A — Test Case ID | Auto-generated unique ID (e.g. TC-3A7F2D1B) |
-| B — Title | Short description of the test case |
-| C — Preconditions | What needs to be set up before running the test |
+| B — Title | Short description of what is being tested |
+| C — Preconditions | What must be set up before running the test |
 | D — Steps | Numbered step-by-step instructions |
 | E — Expected Result | What should happen if the feature works correctly |
 | F — Postconditions | Cleanup or follow-up checks |
 | G — Priority | High / Medium / Low |
 
-Each run **appends** new rows — it never overwrites existing test cases.
+Each run **appends** new rows to the existing file — it never overwrites previous test cases.
 
 ---
 
-## Running in Batch Mode (Multiple Tickets at Once)
+## Changing the CSS Selector (Advanced)
 
-Create a file called `batch.csv` in your project folder:
+The tool uses a CSS selector to find the description/requirement text on Jira pages. For ALTV tickets, this is hardcoded to:
 
-```csv
-url,selector
-https://astrogo.atlassian.net/browse/ALTV-551,[data-testid='issue.views.field.rich-text.description']
-https://astrogo.atlassian.net/browse/ALTV-552,[data-testid='issue.views.field.rich-text.description']
-https://astrogo.atlassian.net/browse/ALTV-553,[data-testid='issue.views.field.rich-text.description']
+```
+[data-testid='issue.views.field.rich-text.description']
 ```
 
-Then run:
-```cmd
-python main.py --batch batch.csv
+If this ever stops working (e.g. after a Jira update), open `config.py` and update this single line:
+
+```python
+JIRA_CSS_SELECTOR: str = "[data-testid='issue.views.field.rich-text.description']"
 ```
 
-All test cases from all tickets will be appended to the same Excel file.
+No other files need to be changed.
 
 ---
 
-## Switching to OpenAI (When You Add Billing)
+## Switching to OpenAI (Optional)
 
-When you are ready to use OpenAI instead of Groq, just update your `.env` file:
+If you prefer OpenAI (requires a paid account), update your `.env`:
 
 ```
-OPENAI_API_KEY=sk-proj-your-openai-key-here
+OPENAI_API_KEY=sk-proj-your-key-here
 LLM_PROVIDER=openai
 EXCEL_FILE_PATH=test_cases.xlsx
 ```
 
-No code changes needed.
+No code changes needed — the switch is automatic.
 
 ---
 
 ## Troubleshooting
 
 ### ❌ "No existing Edge on port 9222"
-The debug Edge window is not open. Run the Step 6 command again to launch it, log in to Jira, and leave it open.
+The debug Edge window is not open. Double-click `start_edge.bat`, log in to Jira in the new window, and leave it open.
+
+### ❌ Jira redirects to a login page
+The Edge debug window was closed or the session expired. Close all Edge windows, double-click `start_edge.bat` again, and log back in to Jira.
 
 ### ❌ "Selector not found on page"
-The selector doesn't match this particular Jira ticket. Run the discover command to see what selectors are available:
+The Jira page structure may have changed. Open `config.py` and update `JIRA_CSS_SELECTOR`. To discover what selectors are available on a ticket, run in Command Prompt:
 ```cmd
 python main.py --discover https://astrogo.atlassian.net/browse/YOUR-TICKET
 ```
-Pick the selector whose content preview matches the description text of the ticket.
+Pick the selector whose content preview matches the requirement description text.
 
-### ❌ "GROQ_API_KEY is not set"
-Your `.env` file either doesn't exist, is in the wrong folder, or has quotes around the value. Check that:
-- The file is named `.env` (not `.env.txt`)
-- It is in the same folder as `main.py`
-- There are no quotes: `GROQ_API_KEY=gsk_abc...` ✅ not `GROQ_API_KEY="gsk_abc..."` ❌
+### ❌ "GROQ_API_KEY is not set" or API authentication error
+Your `.env` file is missing, in the wrong folder, or the key is invalid. Check:
+- It is named exactly `.env` (not `.env.txt` or `env.txt`)
+- It is inside the `TestcaseautomationApp` folder
+- There are no quotes around the key value
+- The key is not expired — generate a new one at https://console.groq.com if needed
 
-To verify the key is loading correctly, run:
-```cmd
-python -c "from dotenv import load_dotenv; load_dotenv(); import os; print(repr(os.getenv('GROQ_API_KEY')))"
-```
-It should print your key, not `None`.
-
-### ❌ "Cannot save test_cases.xlsx"
-The Excel file is currently open in Excel. Close it and run the script again.
-
-### ❌ "ModuleNotFoundError"
-Your virtual environment is not active. Run:
+### ❌ "ModuleNotFoundError: No module named 'flask'" (or similar)
+The virtual environment is not active. In Command Prompt, run:
 ```cmd
 .venv\Scripts\activate
 ```
 Then try again.
 
-### ❌ Jira redirects to login page
-The Edge debug window was closed. Re-run the Step 6 launch command, log back in, and leave the window open.
+### ❌ "Cannot save / open test_cases.xlsx"
+The Excel file is open in Microsoft Excel. Close it and try again.
 
----
+### ❌ Dashboard shows blank page or can't connect
+The Flask server is not running. Double-click `run_app.bat` and wait for the terminal to say the server has started, then refresh the browser.
 
-## All Command Reference
-
-```cmd
-# Single ticket
-python main.py <URL> "<SELECTOR>"
-
-# Single ticket — show browser window (for debugging)
-python main.py <URL> "<SELECTOR>" --no-headless
-
-# Batch mode from CSV
-python main.py --batch batch.csv
-
-# Discover available selectors on a page
-python main.py --discover <URL>
-
-# Save to a custom Excel file
-python main.py <URL> "<SELECTOR>" --output C:\Reports\sprint5.xlsx
-
-# More detailed logs
-python main.py <URL> "<SELECTOR>" --log-level DEBUG
-```
+### ❌ Browser shows old/cached version after an update
+Press `Ctrl + Shift + R` in your browser to force a full reload bypassing the cache.
 
 ---
 
@@ -304,11 +368,36 @@ python main.py <URL> "<SELECTOR>" --log-level DEBUG
 
 | File | What It Does |
 |---|---|
-| `main.py` | Entry point — handles the CLI commands |
-| `scraper.py` | Opens Edge and reads the Jira ticket |
-| `prompt_template.py` | Sends text to the AI and gets test cases back |
-| `parser.py` | Converts AI response into Excel rows |
-| `excel_handler.py` | Writes rows to the Excel file |
-| `config.py` | All settings — model, columns, prompt template |
-| `.env` | Your secret keys — never share this file |
-| `requirements.txt` | List of Python packages needed |
+| `app.py` | Flask web server — all API routes and background job management |
+| `launcher.py` | Starts Flask and opens your browser automatically |
+| `main.py` | Command-line entry point (for advanced/batch use) |
+| `scraper.py` | Opens Edge, navigates to Jira, extracts requirement text |
+| `confluence_scraper.py` | Same as above but for Confluence wiki pages |
+| `prompt_template.py` | Formats the AI prompt and calls the LLM for test cases |
+| `summary_prompt.py` | AI prompt for requirement summary and dependency analysis |
+| `parser.py` | Parses AI JSON response into Excel-ready rows |
+| `excel_handler.py` | Creates/appends to Excel workbooks |
+| `config.py` | All settings — CSS selector, model, output path, API keys |
+| `.env` | Your secret keys — **never share or commit this file** |
+| `requirements.txt` | Python package dependencies |
+| `run_app.bat` | Double-click launcher for the dashboard |
+| `start_edge.bat` | Launches Edge with remote debugging for Jira login |
+| `templates/` | HTML pages served by Flask |
+| `static/` | CSS and JavaScript for the dashboard UI |
+
+---
+
+## Quick Start Checklist
+
+Use this checklist when setting up on a new machine:
+
+- [ ] Python 3.10+ installed with "Add to PATH" ticked
+- [ ] Project folder copied to Desktop (or any location)
+- [ ] Virtual environment created: `python -m venv .venv`
+- [ ] Virtual environment activated: `.venv\Scripts\activate`
+- [ ] Dependencies installed: `pip install -r requirements.txt`
+- [ ] Groq API key obtained from https://console.groq.com
+- [ ] `.env` file created with `GROQ_API_KEY=gsk_...`
+- [ ] `start_edge.bat` run and logged in to Jira in the debug window
+- [ ] `run_app.bat` double-clicked and dashboard opened at http://localhost:5000
+- [ ] First test case generated ✅
