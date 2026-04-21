@@ -123,8 +123,19 @@ C:\Users\<YourName>\Documents\TestCaseAutomator\
 
 | File | Contents |
 |---|---|
-| `test_cases.xlsx` | Generated test cases (one sheet per run, timestamped) |
+| `test_cases.xlsx` | Generated test cases (appended per run) |
 | `summary_requirements.xlsx` | Requirement summaries and dependency tables |
+
+---
+
+## 🔧 Debugging & Development
+
+If you need to troubleshoot or extend the application, you can use these standalone scripts:
+
+- `debug_browser.py`: Verifies the Selenium connection to Edge.
+- `test_groq.py`: Tests the AI API key and response parsing.
+- `test_chunking.py`: Validates text splitting for large pages.
+- `test_e2e.py`: Runs a full scraping-to-excel flow via CLI.
 
 ---
 
@@ -197,7 +208,12 @@ TestCaseAutomator/
 ├── run_app.bat             # Launch the app (dev mode)
 ├── build_exe.bat           # Build standalone .exe with PyInstaller
 ├── requirements.txt        # Python dependencies
-└── .env                    # Your API keys (not committed to git)
+├── .env                    # Your API keys (not committed to git)
+│
+├── debug_browser.py        # Edge connectivity test
+├── test_chunking.py        # Text processing test
+├── test_groq.py            # AI connectivity test
+└── test_e2e.py            # End-to-end CLI test
 ```
 
 ---

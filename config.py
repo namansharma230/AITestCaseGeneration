@@ -26,8 +26,12 @@ OPENAI_MODEL: str = "gpt-4o-mini"
 
 # ── Groq Settings (free, no credit card required) ─────────────────────────────
 # Sign up free at: https://console.groq.com
+# Model selection strategy for optimal free-tier usage:
+#   - llama-3.1-8b-instant:  30 RPM, 6000 TPM, 14400 RPD  (best daily budget)
+#   - llama-3.3-70b-versatile: 30 RPM, 6000 TPM, 1000 RPD (smarter but limited daily)
+# We use llama-3.1-8b-instant for maximum daily throughput.
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL: str = "llama-3.3-70b-versatile"
+GROQ_MODEL: str = "llama-3.1-8b-instant"
 
 # ── Active settings resolved from provider choice ────────────────────────────
 if LLM_PROVIDER == "groq":
@@ -39,7 +43,24 @@ else:
     ACTIVE_API_KEY: str = OPENAI_API_KEY
     ACTIVE_BASE_URL: str = "https://api.openai.com/v1"
 
-MAX_TOKENS: int = 32000
+# ── Token Budget Management ──────────────────────────────────────────────────
+# Groq free tier limits (llama-3.1-8b-instant):
+#   TPM  = 6,000 tokens per minute
+#   RPM  = 30 requests per minute
+#   RPD  = 14,400 requests per day
+# We must ensure input_tokens + output_tokens < TPM for each request.
+#
+# Budget math per chunk (with current settings):
+#   usable     = 6000 * 0.82            = 4920 tokens
+#   for input  = 4920 - overhead - 2200 = ~2320 tokens  (~9 280 chars)
+#   → Increased output budget (2200) allows for exhaustive test cases without truncation.
+GROQ_TPM_LIMIT: int = 6000          # tokens per minute cap
+CHARS_PER_TOKEN: float = 4.0        # rough estimate for English text
+PROMPT_OVERHEAD_TOKENS: int = 400    # system message + template boilerplate
+SAFETY_MARGIN: float = 0.82         # leave 18% headroom
+MAX_OUTPUT_TOKENS: int = 2200       # ↑ increased from 1800 for better exhaustiveness
+CHUNK_DELAY_SECONDS: float = 62.0   # wait between chunks to reset TPM window
+MAX_TOKENS: int = MAX_OUTPUT_TOKENS
 TEMPERATURE: float = 0.3
 LLM_RETRIES: int = 3
 LLM_RETRY_DELAY: float = 2.0
@@ -72,7 +93,8 @@ EXCEL_HEADERS: list[str] = [
 ]
 
 # ── Scraper Settings ──────────────────────────────────────────────────────────
-MAX_TEXT_LENGTH: int = 5000
+# No hard limit on scraping — the LLM layer handles chunking automatically.
+MAX_TEXT_LENGTH: int = 50000
 SELENIUM_WAIT_SECONDS: int = 10
 
 # Default CSS selector used for all ALTV Jira pages.
@@ -80,7 +102,7 @@ SELENIUM_WAIT_SECONDS: int = 10
 JIRA_CSS_SELECTOR: str = "[data-testid='issue.views.field.rich-text.description']"
 
 # ── Confluence Scraper Settings ───────────────────────────────────────────
-CONFLUENCE_MAX_TEXT_LENGTH: int = 8000   # Wiki pages tend to be longer
+CONFLUENCE_MAX_TEXT_LENGTH: int = 50000  # No hard limit; chunking handles size
 CONFLUENCE_WAIT_SECONDS: int = 15       # Confluence pages load slower
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -88,7 +110,7 @@ LOG_DIR: str = "logs"
 LOG_FILE: str = f"{LOG_DIR}/app.log"
 LOG_LEVEL: str = "INFO"
 
-# ── Prompt Template ───────────────────────────────────────────────────────────
+# ── Prompt Template (legacy — used only as fallback) ──────────────────────────
 PROMPT_TEMPLATE: str = """You are a QA expert. Generate 5-10 comprehensive test cases for the following requirement section.
 
 Requirement:

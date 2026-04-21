@@ -16,8 +16,13 @@ from selenium.webdriver.edge.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    TimeoutException,
+    WebDriverException,
+    InvalidSessionIdException,
+)
 from bs4 import BeautifulSoup
+import socket
 
 from config import CONFLUENCE_MAX_TEXT_LENGTH, CONFLUENCE_WAIT_SECONDS
 
@@ -49,23 +54,55 @@ _TITLE_SELECTORS: list[str] = [
 ]
 
 
-def _build_driver(headless: bool = True) -> webdriver.Edge:
-    """Build and return a Microsoft Edge WebDriver, attaching to port 9222 if available."""
-    try:
-        debug_options = Options()
-        debug_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
-        driver = webdriver.Edge(service=Service(), options=debug_options)
-        driver.set_page_load_timeout(60)
-        logger.info("✓ Connected to existing Edge session. Current page: %s", driver.current_url)
-        return driver
-    except Exception:
-        logger.info(
-            "No existing Edge on port 9222 — launching fresh browser.\n"
-            "Tip: start Edge with --remote-debugging-port=9222 to reuse your login:\n"
-            '  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" '
-            '--remote-debugging-port=9222 --user-data-dir="C:\\EdgeDebug"'
-        )
+def _is_port_in_use(port: int) -> bool:
+    """Quick check if a local port is listening."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(('127.0.0.1', port)) == 0
 
+
+def _build_driver(headless: bool = True) -> tuple[webdriver.Edge, bool]:
+    """Build and return (driver, is_attached_to_existing_session)."""
+    # 1. Try to attach to existing Edge on port 9222
+    if _is_port_in_use(9222):
+        try:
+            debug_options = Options()
+            debug_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+            driver = webdriver.Edge(service=Service(), options=debug_options)
+
+            # Increased timeouts for heavy Confluence pages
+            driver.set_page_load_timeout(120)
+            driver.set_script_timeout(60)
+
+            # Health-check: verify the session is alive before returning
+            try:
+                current_url = driver.current_url
+                v = driver.capabilities.get('browserVersion', 'unknown')
+                logger.info("Connected to existing Edge (v%s). Current page: %s", v, current_url)
+                return driver, True
+            except (InvalidSessionIdException, WebDriverException):
+                logger.warning(
+                    "Port 9222 is open but the Edge session is stale/invalid. "
+                    "Please close Edge completely, run start_edge.bat again, "
+                    "log in to Confluence, then retry."
+                )
+                raise ValueError(
+                    "Edge session is stale. Please:\n"
+                    "1. Close all Edge windows\n"
+                    "2. Run start_edge.bat again\n"
+                    "3. Log in to Confluence in the new Edge window\n"
+                    "4. Then retry."
+                )
+        except ValueError:
+            raise   # re-raise our own clear error
+        except Exception as e:
+            logger.debug("Port 9222 was open but connection failed: %s", e)
+
+    # 2. Fall back to fresh browser
+    logger.info(
+        "No existing Edge on port 9222 - launching fresh browser.\n"
+        "Tip: start Edge with --remote-debugging-port=9222 to reuse your login."
+    )
     options = Options()
     if headless:
         options.add_argument("--headless=new")
@@ -78,9 +115,37 @@ def _build_driver(headless: bool = True) -> webdriver.Edge:
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
     )
     driver = webdriver.Edge(service=Service(), options=options)
-    driver.set_page_load_timeout(60)
+    driver.set_page_load_timeout(120)
+    driver.set_script_timeout(60)
     logger.debug("Fresh Edge WebDriver initialised (headless=%s)", headless)
-    return driver
+    return driver, False  # attached = False -> safe to quit
+
+
+def _safe_close_driver(driver: webdriver.Edge, is_attached: bool) -> None:
+    """Release the driver safely. Never quit() or stop the service on an attached session."""
+    if is_attached:
+        # ── WHY session_id = None ──────────────────────────────────────────────
+        # Selenium's WebDriver.__del__() does:
+        #   if hasattr(self, 'session_id'): self.quit()
+        # When this Python object is garbage-collected, __del__ would call
+        # quit() which sends DELETE /session to msedgedriver, which CLOSES
+        # the browser — even though we never called quit() ourselves.
+        # Setting session_id = None makes __del__ skip the quit() call,
+        # so the browser stays alive for the next scrape job.
+        # service.stop() is intentionally NOT called: killing the msedgedriver
+        # proxy leaves Edge's debug endpoint in a broken state, causing
+        # 'invalid session id' errors on subsequent connections.
+        try:
+            driver.session_id = None
+        except Exception:
+            pass
+        logger.debug("Released attached driver safely — browser stays alive.")
+    else:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        logger.debug("Fresh WebDriver session closed.")
 
 
 def _is_login_page(driver: webdriver.Edge) -> bool:
@@ -244,10 +309,11 @@ def scrape_confluence_page(url: str, headless: bool = True) -> str:
     and return cleaned text suitable for LLM test-case generation.
 
     No CSS selector needed — automatically detects Confluence content areas.
+    Reuses the existing Edge debug session on port 9222 if available.
 
     Args:
         url:      Full Confluence page URL.
-        headless: Whether to run in headless mode.
+        headless: Whether to run in headless mode (ignored for attached sessions).
 
     Returns:
         Structured text extracted from the Confluence page.
@@ -255,30 +321,37 @@ def scrape_confluence_page(url: str, headless: bool = True) -> str:
     Raises:
         ValueError: If content cannot be found or page is inaccessible.
     """
-    driver = _build_driver(headless)
+    driver, is_attached = _build_driver(headless)
     try:
         logger.info("Navigating to Confluence page: %s", url)
         driver.get(url)
-        time.sleep(4)  # Confluence pages can be slower to render
+
+        # Confluence + Atlassian SSO can take longer to redirect — wait more than Jira
+        time.sleep(8)
 
         if _is_login_page(driver):
-            if headless:
+            if is_attached:
+                # Attached to real Edge but still on login — user needs to log in
                 raise ValueError(
-                    "Confluence redirected to login but browser is headless.\n"
-                    "Fix: Start Edge with --remote-debugging-port=9222 and log in first."
+                    "Confluence requires login. Please:\n"
+                    "1. Switch to the Edge window that opened via start_edge.bat\n"
+                    "2. Log in to your Atlassian / Confluence account\n"
+                    "3. Navigate to the Confluence page manually once\n"
+                    "4. Then re-submit the URL here."
                 )
-            logger.warning("Login page detected — waiting for manual login.")
-            raise ValueError(
-                "Login required. Please start Edge with:\n"
-                '  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" '
-                '--remote-debugging-port=9222 --user-data-dir="C:\\EdgeDebug"\n'
-                "Then log in to Confluence and try again."
-            )
+            else:
+                raise ValueError(
+                    "Confluence redirected to login and no Edge debug session found on port 9222.\n"
+                    "Fix: Run start_edge.bat first, log in to Confluence, then try again."
+                )
 
         _wait_for_page(driver)
 
         if _is_login_page(driver):
-            raise ValueError("Still on login page. Complete login and re-run.")
+            raise ValueError(
+                "Still on login/auth page after waiting. Please log in to Confluence in the "
+                "Edge window (opened by start_edge.bat) and then re-submit."
+            )
 
         # Get page title
         page_title = _get_page_title(driver)
@@ -318,9 +391,14 @@ def scrape_confluence_page(url: str, headless: bool = True) -> str:
         logger.info("Scraped %d characters from Confluence page.", len(full_text))
         return full_text
 
-    except (ValueError, WebDriverException) as exc:
+    except (ValueError, WebDriverException, InvalidSessionIdException) as exc:
+        err_msg = str(exc)
+        if "invalid session id" in err_msg.lower() or isinstance(exc, InvalidSessionIdException):
+            logger.error(
+                "Edge session became invalid during Confluence scraping. "
+                "Close all Edge windows, run start_edge.bat, log in to Confluence, then retry."
+            )
         logger.error("Confluence scraping failed: %s", exc)
         raise
     finally:
-        driver.quit()
-        logger.debug("WebDriver session closed.")
+        _safe_close_driver(driver, is_attached)

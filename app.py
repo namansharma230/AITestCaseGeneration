@@ -22,7 +22,7 @@ from flask import Flask, render_template, request, jsonify, Response, send_file
 _BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(__file__).parent))
 
 # ── Setup project imports ─────────────────────────────────────────────────────
-from config import LOG_DIR, LOG_FILE, EXCEL_FILE_PATH, JIRA_CSS_SELECTOR
+from config import LOG_DIR, LOG_FILE, EXCEL_FILE_PATH, JIRA_CSS_SELECTOR, CHUNK_DELAY_SECONDS
 from scraper import scrape_section
 from confluence_scraper import scrape_confluence_page
 from prompt_template import generate_test_cases, generate_confluence_test_cases
@@ -114,6 +114,24 @@ def _run_pipeline(job_id: str, url: str, selector: str):
 
         # Step 1 — Scrape
         log_queue.put({"type": "step", "data": "Step 1/4 — Scraping requirement text...", "level": "INFO"})
+
+        # Pre-flight: check Edge debug session (same pattern as summary pipeline)
+        from scraper import _is_port_in_use
+        if _is_port_in_use(9222):
+            log_queue.put({"type": "log", "data": "   ✓ Mode: Attaching to existing Edge session (Port 9222 active)", "level": "INFO"})
+        else:
+            log_queue.put({
+                "type": "log",
+                "data": "   ⚠ WARNING: Edge debug session NOT found on port 9222!\n"
+                        "     Jira requires a logged-in session to scrape tickets.\n"
+                        "     Please run start_edge.bat, log in to Jira, then retry.",
+                "level": "WARNING",
+            })
+            raise RuntimeError(
+                "Edge is not running with remote debugging (port 9222 not open).\n"
+                "Please run start_edge.bat first, log in to Jira in the Edge window, then retry."
+            )
+
         scraped_text = scrape_section(url, selector, headless=True)
 
         # Step 2 — Generate via LLM
@@ -183,6 +201,24 @@ def _run_confluence_pipeline(job_id: str, confluence_url: str):
 
         # Step 1 — Scrape Confluence page
         log_queue.put({"type": "step", "data": "Step 1/4 — Scraping Confluence page content...", "level": "INFO"})
+
+        # Pre-flight: check if Edge debug session is available
+        from scraper import _is_port_in_use
+        if _is_port_in_use(9222):
+            log_queue.put({"type": "log", "data": "   ✓ Mode: Attaching to existing Edge session (Port 9222 active)", "level": "INFO"})
+        else:
+            log_queue.put({
+                "type": "log",
+                "data": "   ⚠ WARNING: Edge debug session NOT found on port 9222!\n"
+                        "     Confluence requires a logged-in session.\n"
+                        "     Please run start_edge.bat, log in to Confluence, then retry.",
+                "level": "WARNING",
+            })
+            raise RuntimeError(
+                "Edge is not running with remote debugging (port 9222 not open).\n"
+                "Please run start_edge.bat first, log in to Confluence in the Edge window, then retry."
+            )
+
         scraped_text = scrape_confluence_page(confluence_url, headless=True)
 
         # Step 2 — Generate via LLM (Confluence-specific prompt)
@@ -254,6 +290,14 @@ def _run_summary_pipeline(job_id: str, url: str, selector: str):
 
         # Step 1 — Scrape
         log_queue.put({"type": "step", "data": f"Step 1/3 — Scraping {source_type} page content...", "level": "INFO"})
+        
+        # We check port 9222 to give early feedback in logs
+        from scraper import _is_port_in_use
+        if _is_port_in_use(9222):
+            log_queue.put({"type": "log", "data": "   Mode: Attaching to existing Edge session (Port 9222)", "level": "INFO"})
+        else:
+            log_queue.put({"type": "log", "data": "   Mode: Launching fresh headless browser (Port 9222 not found)", "level": "INFO"})
+
         if is_confluence:
             scraped_text = scrape_confluence_page(url, headless=True)
         else:
@@ -262,6 +306,10 @@ def _run_summary_pipeline(job_id: str, url: str, selector: str):
         # Step 2 — Generate summary
         log_queue.put({"type": "step", "data": "Step 2/3 — Generating requirement summary via AI...", "level": "INFO"})
         summary_data = generate_summary(scraped_text)
+
+        # Wait for TPM window reset before the next LLM call
+        log_queue.put({"type": "step", "data": f"Waiting {int(CHUNK_DELAY_SECONDS)}s for rate-limit window reset...", "level": "INFO"})
+        time.sleep(CHUNK_DELAY_SECONDS)
 
         # Step 3 — Generate dependencies
         log_queue.put({"type": "step", "data": "Step 3/3 — Identifying testing dependencies via AI...", "level": "INFO"})

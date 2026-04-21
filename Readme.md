@@ -69,25 +69,22 @@ Make sure the folder contains all these files:
 ```
 TestcaseautomationApp/
 ├── app.py                  ← Flask web server (the dashboard)
-├── launcher.py             ← Opens the browser automatically
-├── main.py                 ← Command-line entry point
-├── scraper.py              ← Reads Jira page content via Edge
-├── confluence_scraper.py   ← Reads Confluence page content
-├── prompt_template.py      ← Sends text to AI, gets test cases
+├── launcher.py             ← Desktop launcher (auto-opens browser)
+├── scraper.py              ← Jira page scraper
+├── confluence_scraper.py   ← Confluence page scraper
+├── prompt_template.py      ← AI prompt for test cases
 ├── summary_prompt.py       ← AI prompt for requirement summary
-├── parser.py               ← Converts AI JSON into Excel rows
-├── excel_handler.py        ← Writes rows to Excel
-├── config.py               ← Central settings (selector, model, etc.)
-├── requirements.txt        ← Python package list
-├── run_app.bat             ← Double-click to launch the dashboard
-├── start_edge.bat          ← Double-click to open Edge for Jira login
-├── templates/
-│   ├── index.html          ← Dashboard main page
-│   └── summary.html        ← Requirement summary page
-└── static/
-    ├── style.css
-    ├── script.js
-    └── summary.js
+├── parser.py               ← JSON-to-Excel parser
+├── excel_handler.py        ← Excel workbook writer
+├── config.py               ← Central settings (selectors, tokens, model)
+├── requirements.txt        ← Python dependencies
+├── run_app.bat             ← Launcher for the dashboard
+├── start_edge.bat          ← Opens Edge for Jira/Confluence login
+├── debug_browser.py        ← Utility to test Edge connectivity
+├── test_chunking.py        ← Tests for large text processing
+├── test_groq.py            ← Tests for AI connectivity/parsing
+├── templates/              ← HTML dashboard pages
+└── static/                 ← CSS/JS assets
 ```
 
 > ⚠️ You will create the `.env` file yourself in Step 5.
@@ -307,6 +304,37 @@ JIRA_CSS_SELECTOR: str = "[data-testid='issue.views.field.rich-text.description'
 ```
 
 No other files need to be changed.
+
+---
+
+## Technical Features
+
+### 🚀 Token Optimization & Chunking
+The tool includes a robust **text-chunking engine** that handles massive Jira tickets or Confluence pages. If a requirement exceeds the AI's token limit, the tool automatically:
+1. Splits the text into logical segments.
+2. Identifies headers and structure to maintain context.
+3. Processes chunks sequentially with a rate-limit-aware delay.
+4. Merges all results into a single Excel report.
+
+### 🛡️ Robust JSON Repair
+LLMs sometimes truncate responses. This tool implements a **JSON repair layer** that can fix missing brackets, trailing commas, or truncated objects before they reach the Excel parser.
+
+---
+
+## Debugging & Development
+
+If you are a developer looking to extend the tool or troubleshoot issues, several scripts are included in the root folder:
+
+| Script | Purpose |
+|---|---|
+| `debug_browser.py` | Checks if the Edge remote debugging session (Port 9222) is reachable. |
+| `test_chunking.py` | Validates the text-splitting logic without calling the AI. |
+| `test_groq.py` | Tests your API key and AI response parsing in isolation. |
+| `test_e2e.py` | Performs a full "Scrape → AI → Excel" run via command line. |
+
+**To run a test script:**
+1. Activate your environment: `.venv\Scripts\activate`
+2. Run the file: `python test_groq.py`
 
 ---
 

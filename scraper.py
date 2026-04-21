@@ -19,8 +19,13 @@ from selenium.webdriver.edge.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    TimeoutException,
+    WebDriverException,
+    InvalidSessionIdException,
+)
 from bs4 import BeautifulSoup
+import socket
 
 from config import MAX_TEXT_LENGTH, SELENIUM_WAIT_SECONDS
 
@@ -46,23 +51,55 @@ _JIRA_FALLBACK_SELECTORS: list[str] = [
 ]
 
 
-def _build_driver(headless: bool = True) -> webdriver.Edge:
-    """Build and return a Microsoft Edge WebDriver, attaching to port 9222 if available."""
-    try:
-        debug_options = Options()
-        debug_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
-        driver = webdriver.Edge(service=Service(), options=debug_options)
-        driver.set_page_load_timeout(60)
-        logger.info("✓ Connected to existing Edge session. Current page: %s", driver.current_url)
-        return driver
-    except Exception:
-        logger.info(
-            "No existing Edge on port 9222 — launching fresh browser.\n"
-            "Tip: start Edge with --remote-debugging-port=9222 to reuse your login:\n"
-            '  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" '
-            '--remote-debugging-port=9222 --user-data-dir="C:\\EdgeDebug"'
-        )
+def _is_port_in_use(port: int) -> bool:
+    """Quick check if a local port is listening."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(('127.0.0.1', port)) == 0
 
+
+def _build_driver(headless: bool = True) -> tuple[webdriver.Edge, bool]:
+    """Build and return (driver, is_attached_to_existing_session)."""
+    # 1. Try to attach to existing Edge on port 9222
+    if _is_port_in_use(9222):
+        try:
+            debug_options = Options()
+            debug_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+            driver = webdriver.Edge(service=Service(), options=debug_options)
+
+            # Increased timeouts for complex/slow Jira pages
+            driver.set_page_load_timeout(120)
+            driver.set_script_timeout(60)
+
+            # Health-check: verify the session is alive before returning
+            try:
+                current_url = driver.current_url
+                v = driver.capabilities.get('browserVersion', 'unknown')
+                logger.info("Connected to existing Edge (v%s). Current page: %s", v, current_url)
+                return driver, True
+            except (InvalidSessionIdException, WebDriverException):
+                logger.warning(
+                    "Port 9222 is open but the Edge session is stale/invalid. "
+                    "Please close Edge completely, run start_edge.bat again, "
+                    "log in to Jira, then retry."
+                )
+                raise ValueError(
+                    "Edge session is stale. Please:\n"
+                    "1. Close all Edge windows\n"
+                    "2. Run start_edge.bat again\n"
+                    "3. Log in to Jira in the new Edge window\n"
+                    "4. Then retry."
+                )
+        except ValueError:
+            raise   # re-raise our own clear error
+        except Exception as e:
+            logger.debug("Port 9222 was open but connection failed: %s", e)
+
+    # 2. Fall back to fresh browser
+    logger.info(
+        "No existing Edge on port 9222 - launching fresh browser.\n"
+        "Tip: start Edge with --remote-debugging-port=9222 to reuse your login."
+    )
     options = Options()
     if headless:
         options.add_argument("--headless=new")
@@ -75,9 +112,37 @@ def _build_driver(headless: bool = True) -> webdriver.Edge:
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
     )
     driver = webdriver.Edge(service=Service(), options=options)
-    driver.set_page_load_timeout(60)
+    driver.set_page_load_timeout(120)
+    driver.set_script_timeout(60)
     logger.debug("Fresh Edge WebDriver initialised (headless=%s)", headless)
-    return driver
+    return driver, False  # attached = False -> safe to quit
+
+
+def _safe_close_driver(driver: webdriver.Edge, is_attached: bool) -> None:
+    """Release the driver safely. Never quit() or stop the service on an attached session."""
+    if is_attached:
+        # ── WHY session_id = None ──────────────────────────────────────────────
+        # Selenium's WebDriver.__del__() does:
+        #   if hasattr(self, 'session_id'): self.quit()
+        # When this Python object is garbage-collected, __del__ would call
+        # quit() which sends DELETE /session to msedgedriver, which CLOSES
+        # the browser — even though we never called quit() ourselves.
+        # Setting session_id = None makes __del__ skip the quit() call,
+        # so the browser stays alive for the next scrape job.
+        # service.stop() is intentionally NOT called: killing the msedgedriver
+        # proxy leaves Edge's debug endpoint in a broken state, causing
+        # 'invalid session id' errors on subsequent connections.
+        try:
+            driver.session_id = None
+        except Exception:
+            pass
+        logger.debug("Released attached driver safely — browser stays alive.")
+    else:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        logger.debug("Fresh WebDriver session closed.")
 
 
 def _is_login_page(driver: webdriver.Edge) -> bool:
@@ -126,7 +191,7 @@ def discover_selectors(url: str) -> None:
     Usage:
         python main.py --discover https://astrogo.atlassian.net/browse/ALTV-551
     """
-    driver = _build_driver(headless=False)
+    driver, is_attached = _build_driver(headless=False)
     try:
         logger.info("Discovering selectors on: %s", url)
         driver.get(url)
@@ -155,7 +220,7 @@ def discover_selectors(url: str) -> None:
         print("=" * 72)
 
         if testids:
-            print(f"\n  ── data-testid attributes ({len(testids)} found) ──\n")
+            print(f"\n  -- data-testid attributes ({len(testids)} found) --\n")
             print(f"  {'SELECTOR TO USE':<65} CONTENT PREVIEW")
             print(f"  {'-'*64} {'-'*20}")
             for item in testids:
@@ -166,7 +231,7 @@ def discover_selectors(url: str) -> None:
             print("\n  No data-testid attributes found.")
 
         if ids:
-            print(f"\n  ── id attributes ({len(ids)} found) ──\n")
+            print(f"\n  -- id attributes ({len(ids)} found) --\n")
             print(f"  {'SELECTOR TO USE':<45} CONTENT PREVIEW")
             print(f"  {'-'*44} {'-'*20}")
             for item in ids:
@@ -180,7 +245,7 @@ def discover_selectors(url: str) -> None:
         print(f'  python main.py "{url}" "<your-selector>"')
         print("=" * 72 + "\n")
     finally:
-        driver.quit()
+        _safe_close_driver(driver, is_attached)
 
 
 def _try_fallback_selectors(driver: webdriver.Edge) -> tuple[str, list]:
@@ -198,7 +263,7 @@ def scrape_section(url: str, selector: str, headless: bool = True) -> str:
     Navigate to *url*, handle login if needed, find elements matching *selector*
     (with auto-fallback to built-in Jira selectors), and return cleaned text.
     """
-    driver = _build_driver(headless)
+    driver, is_attached = _build_driver(headless)
     try:
         logger.info("Navigating to: %s", url)
         driver.get(url)
@@ -228,7 +293,7 @@ def scrape_section(url: str, selector: str, headless: bool = True) -> str:
             )
             elements = driver.find_elements(By.CSS_SELECTOR, selector)
         except TimeoutException:
-            logger.warning("Selector '%s' not found — trying Jira fallbacks...", selector)
+            logger.warning("Selector '%s' not found - trying Jira fallbacks...", selector)
 
         # Auto-fallback
         if not elements:
@@ -242,7 +307,7 @@ def scrape_section(url: str, selector: str, headless: bool = True) -> str:
                 f'  python main.py --discover "{url}"'
             )
 
-        logger.info("✓ %d element(s) found using: %s", len(elements), matched_selector)
+        logger.info("%d element(s) found using: %s", len(elements), matched_selector)
 
         text = _extract_text(
             "\n".join(el.get_attribute("outerHTML") for el in elements)
@@ -258,9 +323,14 @@ def scrape_section(url: str, selector: str, headless: bool = True) -> str:
         logger.info("Scraped %d characters.", len(text))
         return text
 
-    except (ValueError, WebDriverException) as exc:
+    except (ValueError, WebDriverException, InvalidSessionIdException) as exc:
+        err_msg = str(exc)
+        if "invalid session id" in err_msg.lower() or isinstance(exc, InvalidSessionIdException):
+            logger.error(
+                "Edge session became invalid during scraping. "
+                "Close all Edge windows, run start_edge.bat, log in to Jira, then retry."
+            )
         logger.error("Scraping failed: %s", exc)
         raise
     finally:
-        driver.quit()
-        logger.debug("WebDriver session closed.")
+        _safe_close_driver(driver, is_attached)
