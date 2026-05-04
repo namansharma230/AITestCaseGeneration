@@ -107,13 +107,17 @@ PROMPT_TEMPLATE = (
     "1. One row per requirement. One negative case for every 3 positive cases.\n"
     "2. STEPS: 5+ specific steps - include names, buttons, and exact input values.\n"
     "3. EXPECTED: Specific UI states, text, or errors.\n"
-    "4. NO MARKDOWN: Output only a valid JSON array. No explanations.\n"
-    "5. FIELD TYPES: All values MUST be simple strings. NO NESTED OBJECTS.\n\n"
+    "4. DESCRIPTION: A brief 1-2 sentence summary of what this test case verifies.\n"
+    "5. PLATFORM: The target platform or environment (e.g. Web, Android, iOS, API, Desktop, Cross-platform).\n"
+    "6. NO MARKDOWN: Output only a valid JSON array. No explanations.\n"
+    "7. FIELD TYPES: All values MUST be simple strings. NO NESTED OBJECTS.\n\n"
     "Requirements:\n{scraped_text}\n\n"
     "[\n"
     "  {{\n"
     '    "title": "Positive/Negative - [brief point]",\n'
+    '    "description": "Brief summary of what this test verifies",\n'
     '    "priority": "High/Medium/Low",\n'
+    '    "platform": "Web/Android/iOS/API/Desktop/Cross-platform",\n'
     '    "preconditions": "User role, device state",\n'
     '    "test_data": "String of exact inputs (NO OBJECTS)",\n'
     '    "steps": ["1. Step...", "2. ..."],\n'
@@ -129,13 +133,17 @@ CONFLUENCE_PROMPT_TEMPLATE = (
     "1. ATOMIC: One case per bullet/row. No merging.\n"
     "2. STEPS: 7+ specific steps with UI labels.\n"
     "3. NEGATIVES: Cover errors/auth for every feature.\n"
-    "4. NO MARKDOWN: Output only valid JSON array. No explanations.\n"
-    "5. FIELD TYPES: All values MUST be simple strings. NO NESTED OBJECTS.\n\n"
+    "4. DESCRIPTION: A brief 1-2 sentence summary of what this test case verifies.\n"
+    "5. PLATFORM: The target platform or environment (e.g. Web, Android, iOS, API, Desktop, Cross-platform).\n"
+    "6. NO MARKDOWN: Output only valid JSON array. No explanations.\n"
+    "7. FIELD TYPES: All values MUST be simple strings. NO NESTED OBJECTS.\n\n"
     "Spec:\n{scraped_text}\n\n"
     "[\n"
     "  {{\n"
     '    "title": "...",\n'
+    '    "description": "Brief summary of what this test verifies",\n'
     '    "priority": "...",\n'
+    '    "platform": "Web/Android/iOS/API/Desktop/Cross-platform",\n'
     '    "preconditions": "...",\n'
     '    "test_data": "String (NO OBJECTS)",\n'
     '    "steps": ["1. Step...", "2. ..."],\n'
@@ -270,11 +278,13 @@ def _validate_test_case(tc: dict[str, Any]) -> dict[str, Any]:
     """Ensure every test case has all required fields and normalised steps/data."""
     defaults = {
         "title": "Untitled Test Case",
+        "description": "No description provided",
         "preconditions": "None",
         "steps": ["1. Execute the test scenario"],
         "expected_result": "Verify the expected behaviour",
         "test_data": "N/A",
         "priority": "Medium",
+        "platform": "N/A",
     }
     for key, default in defaults.items():
         if key not in tc or not tc[key]:

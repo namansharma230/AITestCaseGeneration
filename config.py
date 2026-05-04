@@ -75,21 +75,25 @@ SHEET_NAME: str = "Test Cases"
 EXCEL_COLUMNS: dict[str, int] = {
     "id":               1,
     "title":            2,
-    "preconditions":    3,
-    "steps":            4,
-    "expected_result":  5,
-    "postconditions":   6,
-    "priority":         7,
+    "description":      3,
+    "preconditions":    4,
+    "steps":            5,
+    "expected_result":  6,
+    "postconditions":   7,
+    "priority":         8,
+    "platform":         9,
 }
 
 EXCEL_HEADERS: list[str] = [
     "Test Case ID",
     "Title",
+    "Description",
     "Preconditions",
     "Steps",
     "Expected Result",
     "Postconditions",
     "Priority",
+    "Platform",
 ]
 
 # ── Scraper Settings ──────────────────────────────────────────────────────────

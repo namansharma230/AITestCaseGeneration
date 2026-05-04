@@ -30,11 +30,13 @@ _CELL_ALIGN   = Alignment(wrap_text=True, vertical="top")
 _COLUMN_WIDTHS: dict[str, int] = {
     "Test Case ID":    14,
     "Title":           35,
+    "Description":     40,
     "Preconditions":   30,
     "Steps":           50,
     "Expected Result": 40,
     "Postconditions":  30,
     "Priority":        12,
+    "Platform":        18,
 }
 
 _INVALID_CHARS  = re.compile(r'[\\/?*\[\]:]')

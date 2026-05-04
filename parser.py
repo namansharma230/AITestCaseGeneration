@@ -33,7 +33,7 @@ def parse_to_rows(test_cases: list[dict[str, Any]]) -> list[list[str]]:
     """
     Convert a list of test-case dicts into row arrays for Excel.
 
-    Column order: [ID, Title, Preconditions, Steps, Expected Result, Test Data, Priority]
+    Column order: [ID, Title, Description, Preconditions, Steps, Expected Result, Test Data, Priority, Platform]
     """
     rows: list[list[str]] = []
 
@@ -42,11 +42,13 @@ def parse_to_rows(test_cases: list[dict[str, Any]]) -> list[list[str]]:
             row = [
                 _short_uuid(),                                          # A – Test Case ID
                 str(tc.get("title", "")).strip(),                       # B – Title
-                str(tc.get("preconditions", "")).strip(),               # C – Preconditions
-                _format_steps(tc.get("steps", [])),                     # D – Steps
-                str(tc.get("expected_result", "")).strip(),             # E – Expected Result
-                str(tc.get("test_data", tc.get("postconditions", ""))).strip(),  # F – Test Data
-                str(tc.get("priority", "Medium")).strip(),              # G – Priority
+                str(tc.get("description", "")).strip(),                 # C – Description
+                str(tc.get("preconditions", "")).strip(),               # D – Preconditions
+                _format_steps(tc.get("steps", [])),                     # E – Steps
+                str(tc.get("expected_result", "")).strip(),             # F – Expected Result
+                str(tc.get("test_data", tc.get("postconditions", ""))).strip(),  # G – Test Data
+                str(tc.get("priority", "Medium")).strip(),              # H – Priority
+                str(tc.get("platform", "N/A")).strip(),                 # I – Platform
             ]
             rows.append(row)
             logger.debug("Parsed row %d: ID=%s | Title=%s", i, row[0], row[1])
